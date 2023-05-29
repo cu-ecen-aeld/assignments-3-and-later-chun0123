@@ -13,28 +13,30 @@ void* threadfunc(void* thread_param)
 
     // TODO: wait, obtain mutex, wait, release mutex as described by thread_data structure
     // hint: use a cast like the one below to obtain thread arguments from your parameter
-    //struct thread_data* thread_func_args = (struct thread_data *) thread_param;
+    struct thread_data* thread_func_args = (struct thread_data *) thread_param;
 
-	strust thread_data* thread_fun_args = (struct thread_data*)thread_param;
-	usleep(thread_func_args->wait_to_obtain_ms * 1000);
+    thread_func_args->thread_complete_success=false;
+    *(thread_func_args->thread)=pthread_self();
 
-	int mutex_lock_result = pthread_mutex_lock(thread_func_args->mutex);
-	if(mutex_lock_result != 0){
-		ERROR_LOG("Failed to obtain mutex");
-		pthread_exit(NULL);
-	}
+    usleep((thread_func_args->wait_to_obtain_ms)*1000);
+    int retLock=pthread_mutex_lock(thread_func_args->mutex);
 
+    if(retLock==0){
+            usleep((thread_func_args->wait_to_release_ms)*1000);
+            int retUnLock=pthread_mutex_unlock(thread_func_args->mutex);
+            if(retUnLock==0){
+                    thread_func_args->thread_complete_success=true;
+                    DEBUG_LOG("mutex locked and released successfully\n");
+            }
+            else{
+                    ERROR_LOG("pthread_mutex_unlock failed with return=%d\n", retUnLock);
+            }
+    }
+    else{
+        ERROR_LOG("pthread_mutex_lock failed with return=%d\n", retLock);
+    }
 
-	usleep(thread_func_args->wait_to_release_ms * 1000);
-
-	int mutex_unlock_result = pthread_mutex_unlock(thread_func_args->mutex);
-	if(mutex_unlock_result != 0){
-		ERROR_LOG("Failed to release mutex");
-		pthread_exit(NULL);
-	}
-	pthread_exit(thread_param);
-
-	//return thread_param;
+    return thread_param;
 }
 
 
@@ -48,25 +50,30 @@ bool start_thread_obtaining_mutex(pthread_t *thread, pthread_mutex_t *mutex,int 
      *
      * See implementation details in threading.h file comment block
      */
-    
-	struct thread_data* thread_func_args = (struct thread_data*) malloc(sizeof(struct thread_data));
-	if(thread_func_args == NULL){
-		ERROR_LOG("Failed to allicata memory for thread_data");
-		return false;
-	}
 
+    struct thread_data* thread_param = (struct thread_data *) malloc(sizeof(struct thread_data));
 
-	thread_func_args->mutex = mutex;
-	thread_func_args->wait_to_obtain_ms = wait_to_obtain_ms;
-	thread_func_args->wait_to_release_ms = wait_to_release_ms;
+    if(thread_param!=NULL){
 
-	int create_thread_result - pthread_create(thread, NULL, threadfunc, (void*) thread_func_args);
-	if(create_thread_result != 0){
-		ERROR_LOG("Failed to create thread");
-		free(thread_func_args);
-		return false;
-	}
+            thread_param->thread = thread;
+            thread_param->mutex = mutex;
+            thread_param->wait_to_obtain_ms = wait_to_obtain_ms;
+            thread_param->wait_to_release_ms = wait_to_release_ms;
 
-	return true;
+            pthread_t t;
+            int ret = pthread_create( &t, NULL, threadfunc, thread_param);
+            if(ret==0){
+                DEBUG_LOG("Thread created successfully\n");
+                return true;
+            }
+            else{
+                ERROR_LOG("pthread_create failed with return=%d\n", ret);
+            }
+
+    }
+
+    DEBUG_LOG("malloc failed\n");
+
+    return false;
 }
 
